@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=yes"
+    />
+    <title>Holord - Capture or Upload Photo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        background: #0a0a0a;
+        height: 100vh;
+        overflow: hidden;
+        font-family: "Inter", system-ui, -apple-system, sans-serif;
+      }
+
+      /* Camera preview mode */
+      .camera-fullscreen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 1;
+        background: #000;
+      }
+
+      video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      /* Upload overlay mode */
+      .upload-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(145deg, #f8fafc 0%, #eef2ff 100%);
+        z-index: 20;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+        overflow-y: auto;
+      }
+
+      .floating-ui {
+        position: fixed;
+        z-index: 10;
+        pointer-events: none;
+      }
+
+      .floating-ui > * {
+        pointer-events: auto;
+      }
+
+      .positioning-guide {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 5;
+      }
+
+      .guide-line {
+        position: absolute;
+        background-color: rgba(255, 255, 255, 0.4);
+      }
+
+      .guide-center {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 22px;
+        height: 22px;
+        border: 2px solid rgba(255, 255, 255, 0.8);
+        border-radius: 50%;
+        box-shadow: 0 0 8px rgba(0, 0, 0, 0.3);
+      }
+
+      .grid-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(3, 1fr);
+        pointer-events: none;
+      }
+
+      .grid-cell {
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+
+      .flash-effect {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: white;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s;
+        z-index: 20;
+      }
+
+      .capture-indicator {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 80px;
+        height: 80px;
+        border: 4px solid white;
+        border-radius: 50%;
+        opacity: 0;
+        z-index: 15;
+        background: rgba(255, 255, 255, 0.2);
+      }
+
+      .pulse {
+        animation: pulseAnim 1.2s infinite;
+      }
+
+      @keyframes pulseAnim {
+        0% {
+          transform: translate(-50%, -50%) scale(0.8);
+          opacity: 0.7;
+        }
+        50% {
+          transform: translate(-50%, -50%) scale(1.2);
+          opacity: 0.3;
+        }
+        100% {
+          transform: translate(-50%, -50%) scale(0.8);
+          opacity: 0.7;
+        }
+      }
+
+      /* Upload card styles */
+      .upload-card {
+        background: rgba(255, 255, 255, 0.96);
+        backdrop-filter: blur(8px);
+        border-radius: 2rem;
+        box-shadow: 0 25px 45px -12px rgba(0, 0, 0, 0.3);
+        max-width: 480px;
+        width: 100%;
+        transition: all 0.2s ease;
+      }
+
+      .drag-area {
+        border: 2px dashed #cbd5e1;
+        transition: all 0.2s;
+      }
+
+      .drag-area.drag-over {
+        border-color: #2d3fa8;
+        background: #eff6ff;
+      }
+
+      .btn-primary {
+        background: #2d3fa8;
+        transition: all 0.2s;
+      }
+
+      .btn-primary:hover {
+        background: #1e2a78;
+        transform: translateY(-1px);
+      }
+
+      .mode-switch {
+        transition: all 0.2s;
+        cursor: pointer;
+      }
+
+      .mode-switch.active {
+        background: #2d3fa8;
+        color: white;
+        border-color: #2d3fa8;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- CAMERA MODE SECTION -->
+    <div id="cameraMode" style="display: none">
+      <div class="camera-fullscreen">
+        <video id="video" autoplay playsinline></video>
+        <canvas id="canvas" class="hidden"></canvas>
+
+        <!-- Positioning guide overlay -->
+        <div class="positioning-guide">
+          <div class="guide-center"></div>
+          <div
+            class="guide-line"
+            style="top: 10%; left: 0; width: 100%; height: 2px"
+          ></div>
+          <div
+            class="guide-line"
+            style="top: 90%; left: 0; width: 100%; height: 2px"
+          ></div>
+          <div
+            class="guide-line"
+            style="top: 0; left: 10%; width: 2px; height: 100%"
+          ></div>
+          <div
+            class="guide-line"
+            style="top: 0; left: 90%; width: 2px; height: 100%"
+          ></div>
+          <div class="grid-overlay">
+            <div class="grid-cell"></div>
+            <div class="grid-cell"></div>
+            <div class="grid-cell"></div>
+            <div class="grid-cell"></div>
+            <div class="grid-cell"></div>
+            <div class="grid-cell"></div>
+            <div class="grid-cell"></div>
+            <div class="grid-cell"></div>
+            <div class="grid-cell"></div>
+          </div>
+        </div>
+
+        <div id="flash" class="flash-effect"></div>
+        <div id="captureIndicator" class="capture-indicator"></div>
+      </div>
+
+      <!-- Floating UI Camera controls -->
+      <div class="floating-ui top-0 left-0 w-full p-5">
+        <div class="flex justify-between items-center">
+          <button
+            id="backToUploadBtn"
+            class="bg-black/40 backdrop-blur-md text-white px-4 py-2 rounded-full text-sm flex items-center gap-1"
+          >
+            <svg
+              class="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M10 19l-7-7m0 0l7-7m-7 7h18"
+              />
+            </svg>
+            Back
+          </button>
+          <div
+            class="bg-black/40 backdrop-blur-md px-4 py-2 rounded-full text-white text-sm font-medium"
+          >
+            📸 Camera
+          </div>
+        </div>
+      </div>
+
+      <div class="floating-ui top-20 left-0 w-full px-5">
+        <div
+          class="bg-black/40 backdrop-blur-md rounded-2xl p-3 max-w-sm mx-auto text-center"
+        >
+          <p class="text-white text-sm">
+            🧍 Frame your upper body or full look inside the guides
+          </p>
+        </div>
+      </div>
+
+      <div class="floating-ui bottom-0 left-0 w-full p-6">
+        <div class="flex flex-col items-center gap-3">
+          <button
+            id="captureBtn"
+            class="bg-white text-black font-bold py-4 px-8 rounded-full shadow-xl w-full max-w-xs flex items-center justify-center gap-2 text-lg"
+          >
+            <svg
+              class="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+              />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
+              />
+            </svg>
+            Capture Photo
+          </button>
+
+          <div class="flex gap-5">
+            <button
+              id="flipCamera"
+              class="bg-black/40 backdrop-blur-md text-white p-3 rounded-full"
+            >
+              <svg
+                class="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                />
+              </svg>
+            </button>
+            <button
+              id="flashToggle"
+              class="bg-black/40 backdrop-blur-md text-white p-3 rounded-full"
+            >
+              <svg
+                class="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M13 10V3L4 14h7v7l9-11h-7z"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- UPLOAD / GALLERY MODE (default visible) -->
+    <div id="uploadMode" class="upload-overlay">
+      <div class="upload-card p-6 md:p-8">
+        <!-- Logo & Brand -->
+        <div class="text-center mb-6">
+          <div
+            class="w-16 h-16 bg-[#2D3FA8] rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg"
+          >
+            <span class="text-white font-bold text-3xl">H</span>
+          </div>
+          <h1 class="text-2xl font-extrabold text-gray-800">Holord Studio</h1>
+          <p class="text-gray-500 text-sm mt-1">Virtual try-on · Mix & match</p>
+        </div>
+
+        <!-- Tab Switch: Upload vs Camera -->
+        <div class="flex bg-gray-100 p-1 rounded-2xl mb-6">
+          <button
+            id="switchToUploadTab"
+            class="flex-1 py-2.5 rounded-xl font-semibold text-sm transition mode-switch active"
+          >
+            📁 Upload Photo
+          </button>
+          <button
+            id="switchToCameraTab"
+            class="flex-1 py-2.5 rounded-xl font-semibold text-sm transition mode-switch"
+          >
+            📸 Take a Photo
+          </button>
+        </div>
+
+        <!-- Upload File Area -->
+        <div id="fileUploadPanel">
+          <div
+            id="dragDropArea"
+            class="drag-area rounded-2xl p-8 text-center cursor-pointer transition bg-white border border-gray-200"
+          >
+            <svg
+              class="w-12 h-12 mx-auto text-[#2D3FA8] mb-3"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="1.5"
+                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+              />
+            </svg>
+            <p class="text-gray-700 font-medium">Click or drag & drop</p>
+            <p class="text-gray-400 text-xs mt-1">JPEG, PNG, WebP (Max 10MB)</p>
+            <input
+              type="file"
+              id="fileInput"
+              accept="image/jpeg,image/png,image/webp"
+              class="hidden"
+            />
+          </div>
+
+          <div id="imagePreviewContainer" class="mt-5 hidden">
+            <div class="relative rounded-xl overflow-hidden bg-gray-100">
+              <img
+                id="uploadPreview"
+                class="w-full h-auto max-h-64 object-contain"
+                alt="Preview"
+              />
+              <button
+                id="clearPreviewBtn"
+                class="absolute top-2 right-2 bg-black/60 text-white p-1.5 rounded-full hover:bg-black/80"
+              >
+                <svg
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+            <p
+              class="text-green-600 text-xs text-center mt-2 flex items-center justify-center gap-1"
+            >
+              ✓ Ready to continue
+            </p>
+          </div>
+
+          <button
+            id="confirmUploadBtn"
+            class="btn-primary w-full text-white font-bold py-3.5 rounded-xl mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled
+          >
+            Continue with this photo →
+          </button>
+          <p class="text-xs text-gray-400 text-center mt-4">
+            Your photo stays on device during preview
+          </p>
+        </div>
+
+        <div
+          class="mt-6 text-center text-xs text-gray-400 border-t border-gray-100 pt-5"
+        >
+          <span>👗 Mix tops & bottoms • AI virtual fitting</span>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // ---------- GLOBALS ----------
+      let currentFacingMode = "user";
+      let stream = null;
+      let flashOn = false;
+      let selectedImageData = null; // base64
+      let selectedImageFile = null;
+
+      // DOM elements
+      const uploadModeDiv = document.getElementById("uploadMode");
+      const cameraModeDiv = document.getElementById("cameraMode");
+      const videoElem = document.getElementById("video");
+      const canvasElem = document.getElementById("canvas");
+      const captureBtn = document.getElementById("captureBtn");
+      const flipBtn = document.getElementById("flipCamera");
+      const flashToggleBtn = document.getElementById("flashToggle");
+      const flashDiv = document.getElementById("flash");
+      const captureIndicator = document.getElementById("captureIndicator");
+      const backToUpload = document.getElementById("backToUploadBtn");
+
+      // Upload tab elements
+      const switchToUploadTab = document.getElementById("switchToUploadTab");
+      const switchToCameraTab = document.getElementById("switchToCameraTab");
+      const fileInput = document.getElementById("fileInput");
+      const dragArea = document.getElementById("dragDropArea");
+      const imagePreviewContainer = document.getElementById(
+        "imagePreviewContainer"
+      );
+      const uploadPreview = document.getElementById("uploadPreview");
+      const clearPreviewBtn = document.getElementById("clearPreviewBtn");
+      const confirmUploadBtn = document.getElementById("confirmUploadBtn");
+
+      // ---------- CAMERA LOGIC ----------
+      async function initCamera(facingMode = "user") {
+        if (stream) {
+          stream.getTracks().forEach((track) => track.stop());
+          stream = null;
+        }
+        const constraints = {
+          video: {
+            facingMode: { exact: facingMode },
+            width: { ideal: 1080 },
+            height: { ideal: 1920 },
+          },
+        };
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+          videoElem.srcObject = stream;
+          currentFacingMode = facingMode;
+        } catch (err) {
+          // fallback without exact
+          try {
+            const fallbackConstraints = { video: { facingMode: facingMode } };
+            stream = await navigator.mediaDevices.getUserMedia(
+              fallbackConstraints
+            );
+            videoElem.srcObject = stream;
+            currentFacingMode = facingMode;
+          } catch (err2) {
+            alert(
+              "Camera not accessible. Please check permissions or use file upload."
+            );
+            console.error(err2);
+            showUploadMode();
+          }
+        }
+      }
+
+      function showCameraMode() {
+        uploadModeDiv.style.display = "none";
+        cameraModeDiv.style.display = "block";
+        initCamera(currentFacingMode);
+      }
+
+      function showUploadMode() {
+        if (stream) {
+          stream.getTracks().forEach((t) => t.stop());
+          stream = null;
+        }
+        cameraModeDiv.style.display = "none";
+        uploadModeDiv.style.display = "flex";
+      }
+
+      async function capturePhoto() {
+        if (!videoElem.videoWidth || !videoElem.videoHeight) {
+          alert("Camera not ready");
+          return;
+        }
+        // show flash & indicator
+        if (flashOn) {
+          flashDiv.style.opacity = "0.8";
+          setTimeout(() => {
+            flashDiv.style.opacity = "0";
+          }, 250);
+        }
+        captureIndicator.classList.add("pulse");
+        captureIndicator.style.opacity = "1";
+
+        setTimeout(() => {
+          const context = canvasElem.getContext("2d");
+          canvasElem.width = videoElem.videoWidth;
+          canvasElem.height = videoElem.videoHeight;
+          context.drawImage(
+            videoElem,
+            0,
+            0,
+            canvasElem.width,
+            canvasElem.height
+          );
+          const imageDataURL = canvasElem.toDataURL("image/jpeg", 0.9);
+
+          // Store in localStorage and also keep in memory
+          localStorage.setItem("userPhoto", imageDataURL);
+          selectedImageData = imageDataURL;
+
+          captureIndicator.classList.remove("pulse");
+          captureIndicator.style.opacity = "0";
+
+          // Show small success feedback
+          captureBtn.innerHTML =
+            '<span class="animate-pulse">✨ Captured! Redirecting...</span>';
+          setTimeout(() => {
+            window.location.href = "outfit.html";
+          }, 700);
+        }, 200);
+      }
+
+      function flipCamera() {
+        const newMode = currentFacingMode === "user" ? "environment" : "user";
+        initCamera(newMode);
+      }
+
+      // ---------- UPLOAD & DRAG & DROP ----------
+      function handleImageFile(file) {
+        if (!file) return;
+        if (!file.type.match("image.*")) {
+          alert("Please select an image file (JPEG, PNG, WebP)");
+          return;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+          alert("File too large (max 10MB)");
+          return;
+        }
+        selectedImageFile = file;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          selectedImageData = e.target.result;
+          uploadPreview.src = selectedImageData;
+          imagePreviewContainer.classList.remove("hidden");
+          confirmUploadBtn.disabled = false;
+          confirmUploadBtn.classList.remove("opacity-50");
+        };
+        reader.readAsDataURL(file);
+      }
+
+      function triggerFileSelect() {
+        fileInput.click();
+      }
+
+      function clearSelection() {
+        selectedImageData = null;
+        selectedImageFile = null;
+        imagePreviewContainer.classList.add("hidden");
+        uploadPreview.src = "";
+        confirmUploadBtn.disabled = true;
+        confirmUploadBtn.classList.add("opacity-50");
+        if (fileInput) fileInput.value = "";
+      }
+
+      function confirmUploadAndContinue() {
+        if (!selectedImageData) {
+          alert("Please select or upload a photo first.");
+          return;
+        }
+        // store in localStorage exactly same as camera capture does
+        localStorage.setItem("userPhoto", selectedImageData);
+        // redirect to outfit.html (main mix&match page)
+        window.location.href = "outfit.html";
+      }
+
+      // Drag & Drop handlers
+      function setupDragDrop() {
+        dragArea.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          dragArea.classList.add("drag-over");
+        });
+        dragArea.addEventListener("dragleave", () => {
+          dragArea.classList.remove("drag-over");
+        });
+        dragArea.addEventListener("drop", (e) => {
+          e.preventDefault();
+          dragArea.classList.remove("drag-over");
+          const files = e.dataTransfer.files;
+          if (files.length > 0) {
+            handleImageFile(files[0]);
+          }
+        });
+        dragArea.addEventListener("click", () => {
+          fileInput.click();
+        });
+        fileInput.addEventListener("change", (e) => {
+          if (e.target.files.length) handleImageFile(e.target.files[0]);
+        });
+        clearPreviewBtn.addEventListener("click", clearSelection);
+        confirmUploadBtn.addEventListener("click", confirmUploadAndContinue);
+      }
+
+      // ----- Tab switching (Upload vs Camera inside the card)
+      function setActiveTab(mode) {
+        if (mode === "upload") {
+          switchToUploadTab.classList.add(
+            "active",
+            "bg-[#2D3FA8]",
+            "text-white"
+          );
+          switchToUploadTab.classList.remove("bg-transparent", "text-gray-700");
+          switchToCameraTab.classList.remove(
+            "active",
+            "bg-[#2D3FA8]",
+            "text-white"
+          );
+          switchToCameraTab.classList.add("bg-transparent", "text-gray-700");
+          // show upload panel & hide camera mode
+          document.getElementById("fileUploadPanel").style.display = "block";
+          // if camera was active, stop stream and go back to upload UI without full switch
+          if (cameraModeDiv.style.display === "block") {
+            if (stream) {
+              stream.getTracks().forEach((t) => t.stop());
+              stream = null;
+            }
+            cameraModeDiv.style.display = "none";
+            uploadModeDiv.style.display = "flex";
+          }
+        } else {
+          // camera tab
+          switchToCameraTab.classList.add(
+            "active",
+            "bg-[#2D3FA8]",
+            "text-white"
+          );
+          switchToCameraTab.classList.remove("bg-transparent", "text-gray-700");
+          switchToUploadTab.classList.remove(
+            "active",
+            "bg-[#2D3FA8]",
+            "text-white"
+          );
+          switchToUploadTab.classList.add("bg-transparent", "text-gray-700");
+          // switch to camera fullscreen mode
+          uploadModeDiv.style.display = "none";
+          showCameraMode();
+        }
+      }
+
+      // attach listeners to tabs
+      switchToUploadTab.addEventListener("click", () => setActiveTab("upload"));
+      switchToCameraTab.addEventListener("click", () => setActiveTab("camera"));
+
+      // back button from camera to upload panel (preserve upload tab)
+      backToUpload.addEventListener("click", () => {
+        if (stream) {
+          stream.getTracks().forEach((t) => t.stop());
+          stream = null;
+        }
+        cameraModeDiv.style.display = "none";
+        uploadModeDiv.style.display = "flex";
+        // reset tab UI to upload active
+        setActiveTab("upload");
+      });
+
+      // Camera action listeners
+      captureBtn.addEventListener("click", capturePhoto);
+      flipBtn.addEventListener("click", flipCamera);
+      flashToggleBtn.addEventListener("click", () => {
+        flashOn = !flashOn;
+        if (flashOn) {
+          flashToggleBtn.classList.add("bg-yellow-400", "text-black");
+          flashToggleBtn.classList.remove("bg-black/40", "text-white");
+        } else {
+          flashToggleBtn.classList.remove("bg-yellow-400", "text-black");
+          flashToggleBtn.classList.add("bg-black/40", "text-white");
+        }
+      });
+
+      // page load initialization: show upload mode by default and prefill if needed
+      function initPage() {
+        // default visible: upload panel
+        uploadModeDiv.style.display = "flex";
+        cameraModeDiv.style.display = "none";
+        setupDragDrop();
+        setActiveTab("upload");
+
+        // optional: check if there's leftover photo in localStorage? not needed but we keep clean
+        // ensure no auto redirection
+        const testStored = localStorage.getItem("userPhoto");
+        if (testStored && testStored.length > 500) {
+          // if there is an old photo, we don't auto use, we let user choose new or upload.
+          // but we can show indicator.
+          console.log(
+            "Existing photo found, you can overwrite by uploading a new one."
+          );
+        }
+      }
+
+      initPage();
+    </script>
+  </body>
+</html>

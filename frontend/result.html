@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Your Holographic Outfit - Holord</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-b from-[#203d81] to-[#1860ac] min-h-screen flex flex-col items-center justify-center text-white p-6">
+
+  <h1 class="text-3xl font-bold mb-6">Your Holographic Outfit</h1>
+
+  <div class="flex flex-col items-center gap-6">
+    <img id="aiImage" src="" alt="AI Generated Outfit" class="rounded-lg shadow-lg max-w-sm">
+    <p>Scan the QR code to download your image:</p>
+    <img id="qrCode" src="" alt="QR Code" class="w-32 h-32">
+
+    <button id="startOverBtn" class="bg-white text-[#203d81] font-semibold px-6 py-3 rounded-lg shadow-lg mt-6">
+      Start Over
+    </button>
+  </div>
+
+  <script>
+    // Load image + QR from sessionStorage
+    const aiImageUrl = sessionStorage.getItem("resultImageUrl");
+    const qrCodeData = sessionStorage.getItem("qrCode");
+
+    if (!aiImageUrl || !qrCodeData) {
+      // No data, redirect to homepage
+      window.location.href = "index.html";
+    }
+
+    document.getElementById("aiImage").src = aiImageUrl;
+    document.getElementById("qrCode").src = qrCodeData;
+
+    // Start over button
+    document.getElementById("startOverBtn").addEventListener("click", () => {
+      // Clear stored data
+      sessionStorage.removeItem("resultImageUrl");
+      sessionStorage.removeItem("qrCode");
+      localStorage.removeItem("userPhoto");
+
+      window.location.href = "index.html";
+    });
+  </script>
+
+</body>
+</html>
